@@ -37,8 +37,8 @@ public:
     std::string prefix;
     std::ostream* out = &std::cerr;
 
-    explicit Bar(size_t total, std::string prefix = "")
-        : total(total), prefix_(std::move(prefix)), n_(0), start_(clock_t::now()) {}
+    explicit Bar(size_t total, std::string label = "")
+        : total(total), prefix(std::move(label)), n_(0), start_(clock_t::now()) {}
 
     void update(size_t n = 1) {
         std::lock_guard<std::mutex> lk(mtx_);
@@ -64,7 +64,6 @@ public:
     size_t current() const { return n_; }
 
 private:
-    std::string prefix_;
     size_t n_;
     tp_t start_;
     mutable std::mutex mtx_;
@@ -75,7 +74,7 @@ private:
         if (filled > width) filled = width;
 
         std::ostringstream ss;
-        if (!prefix_.empty()) ss << prefix_ << " ";
+        if (!prefix.empty()) ss << prefix << " ";
         ss << "[";
         for (int i = 0; i < filled - 1; i++) ss << fill;
         if (filled > 0 && n_ < total) ss << head;
@@ -83,7 +82,6 @@ private:
         for (int i = filled; i < width; i++) ss << empty;
         ss << "] ";
 
-        // percentage
         char pct_buf[8];
         std::snprintf(pct_buf, sizeof(pct_buf), "%3.0f%%", pct * 100.0);
         ss << pct_buf;
@@ -151,7 +149,6 @@ private:
     }
 };
 
-// convenience: wrap a range with a progress bar
 template<typename Container>
 class Range {
 public:
@@ -166,7 +163,7 @@ public:
         auto& operator*() { return *it; }
     };
 
-    Iter begin() { bar_ = Bar(c_.size(), bar_.current() == 0 ? "" : ""); return {c_.begin(), bar_}; }
+    Iter begin() { return {c_.begin(), bar_}; }
     Iter end()   { return {c_.end(), bar_}; }
 
 private:
