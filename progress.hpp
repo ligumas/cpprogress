@@ -1,0 +1,177 @@
+#pragma once
+
+#include <iostream>
+#include <string>
+#include <chrono>
+#include <cmath>
+#include <sstream>
+#include <mutex>
+#include <thread>
+#include <atomic>
+
+namespace progress {
+
+using clock_t = std::chrono::steady_clock;
+using tp_t    = std::chrono::time_point<clock_t>;
+
+inline std::string fmt_duration(double secs) {
+    if (secs < 0 || std::isinf(secs)) return "--:--";
+    int s = (int)secs;
+    int m = s / 60; s %= 60;
+    int h = m / 60; m %= 60;
+    char buf[16];
+    if (h > 0) std::snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
+    else       std::snprintf(buf, sizeof(buf), "%02d:%02d", m, s);
+    return buf;
+}
+
+class Bar {
+public:
+    size_t total;
+    int width       = 40;
+    char fill       = '=';
+    char head       = '>';
+    char empty      = ' ';
+    bool show_eta   = true;
+    bool show_rate  = true;
+    std::string prefix;
+    std::ostream* out = &std::cerr;
+
+    explicit Bar(size_t total, std::string prefix = "")
+        : total(total), prefix_(std::move(prefix)), n_(0), start_(clock_t::now()) {}
+
+    void update(size_t n = 1) {
+        std::lock_guard<std::mutex> lk(mtx_);
+        n_ += n;
+        if (n_ > total) n_ = total;
+        render();
+    }
+
+    void set(size_t n) {
+        std::lock_guard<std::mutex> lk(mtx_);
+        n_ = n > total ? total : n;
+        render();
+    }
+
+    void finish() {
+        std::lock_guard<std::mutex> lk(mtx_);
+        n_ = total;
+        render();
+        *out << "\n";
+        out->flush();
+    }
+
+    size_t current() const { return n_; }
+
+private:
+    std::string prefix_;
+    size_t n_;
+    tp_t start_;
+    mutable std::mutex mtx_;
+
+    void render() {
+        double pct = total > 0 ? (double)n_ / total : 0.0;
+        int filled = (int)(pct * width);
+        if (filled > width) filled = width;
+
+        std::ostringstream ss;
+        if (!prefix_.empty()) ss << prefix_ << " ";
+        ss << "[";
+        for (int i = 0; i < filled - 1; i++) ss << fill;
+        if (filled > 0 && n_ < total) ss << head;
+        else if (filled > 0) ss << fill;
+        for (int i = filled; i < width; i++) ss << empty;
+        ss << "] ";
+
+        // percentage
+        char pct_buf[8];
+        std::snprintf(pct_buf, sizeof(pct_buf), "%3.0f%%", pct * 100.0);
+        ss << pct_buf;
+
+        double elapsed = std::chrono::duration<double>(clock_t::now() - start_).count();
+
+        if (show_rate && elapsed > 0.1) {
+            double rate = n_ / elapsed;
+            char rbuf[24];
+            if (rate >= 1.0) std::snprintf(rbuf, sizeof(rbuf), " %.1f/s", rate);
+            else             std::snprintf(rbuf, sizeof(rbuf), " %.2fs/it", 1.0 / rate);
+            ss << rbuf;
+        }
+
+        if (show_eta && n_ > 0 && n_ < total) {
+            double rate = n_ / elapsed;
+            double eta  = rate > 0 ? (total - n_) / rate : -1.0;
+            ss << " eta " << fmt_duration(eta);
+        }
+
+        *out << "\r" << ss.str() << "   ";
+        out->flush();
+    }
+};
+
+class Spinner {
+public:
+    std::string prefix;
+    int interval_ms = 80;
+
+    explicit Spinner(std::string msg = "")
+        : prefix(std::move(msg)), running_(false) {}
+
+    ~Spinner() { if (running_) stop(); }
+
+    void start() {
+        running_ = true;
+        t_ = std::thread([this] { loop(); });
+    }
+
+    void stop(const std::string& final_msg = "") {
+        running_ = false;
+        if (t_.joinable()) t_.join();
+        std::cerr << "\r";
+        if (!final_msg.empty()) std::cerr << final_msg << "\n";
+        else                    std::cerr << std::string(60, ' ') << "\r";
+        std::cerr.flush();
+    }
+
+private:
+    std::atomic<bool> running_;
+    std::thread t_;
+    static constexpr const char* frames_[] = {"⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"};
+
+    void loop() {
+        int i = 0;
+        while (running_) {
+            std::cerr << "\r" << frames_[i % 10];
+            if (!prefix.empty()) std::cerr << " " << prefix;
+            std::cerr << "   ";
+            std::cerr.flush();
+            i++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(interval_ms));
+        }
+    }
+};
+
+// convenience: wrap a range with a progress bar
+template<typename Container>
+class Range {
+public:
+    Range(Container& c, std::string label = "")
+        : c_(c), bar_(c.size(), std::move(label)) {}
+
+    struct Iter {
+        typename Container::iterator it;
+        Bar& bar;
+        Iter& operator++() { ++it; bar.update(); return *this; }
+        bool operator!=(const Iter& o) const { return it != o.it; }
+        auto& operator*() { return *it; }
+    };
+
+    Iter begin() { bar_ = Bar(c_.size(), bar_.current() == 0 ? "" : ""); return {c_.begin(), bar_}; }
+    Iter end()   { return {c_.end(), bar_}; }
+
+private:
+    Container& c_;
+    Bar bar_;
+};
+
+} // namespace progress
