@@ -14,7 +14,7 @@ void test_bar_progress() {
     check(b.current() == 50, "current after update");
     b.set(80);
     check(b.current() == 80, "current after set");
-    b.update(100); // clamps to total
+    b.update(100);
     check(b.current() == 100, "clamps to total");
 }
 
@@ -51,12 +51,20 @@ void test_bar_multithreaded() {
     check(b.current() == 1000, "multithreaded updates sum correctly");
 }
 
+void test_prefix_settable() {
+    progress::Bar b(10);
+    b.prefix = "loading";
+    b.update(5);
+    check(b.current() == 5, "prefix settable post-construction");
+}
+
 int main() {
     test_bar_progress();
     test_bar_zero_total();
     test_fmt_duration();
     test_bar_finish();
     test_bar_multithreaded();
+    test_prefix_settable();
 
     std::cerr << "\n" << ok << "/" << (ok + fail) << " tests passed\n";
     return fail == 0 ? 0 : 1;
