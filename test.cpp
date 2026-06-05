@@ -5,7 +5,9 @@
 #include <vector>
 
 int ok = 0, fail = 0;
-#define check(cond, msg) if(cond){ok++;}else{std::cerr<<"\nFAIL: "<<msg<<"\n";fail++;}
+#define check(cond, msg) if(cond){ok++;}else{std::cerr<<"
+FAIL: "<<msg<<"
+";fail++;}
 
 void test_bar_progress() {
     progress::Bar b(100);
@@ -51,13 +53,52 @@ void test_bar_multithreaded() {
     check(b.current() == 1000, "multithreaded updates sum correctly");
 }
 
+void test_spinner_start_stop() {
+    progress::Spinner s("working");
+    s.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    s.stop();
+    check(true, "spinner start/stop");
+}
+
+void test_spinner_stop_with_message() {
+    progress::Spinner s("loading");
+    s.start();
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    s.stop("done");
+    check(true, "spinner stop with final message");
+}
+
+void test_spinner_destructor() {
+    {
+        progress::Spinner s("auto-stop");
+        s.start();
+        std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    }
+    check(true, "spinner destructor joins cleanly");
+}
+
+void test_range_iteration() {
+    std::vector<int> v = {1, 2, 3, 4, 5};
+    int sum = 0;
+    progress::Range<std::vector<int>> r(v, "iter");
+    for (auto& x : r) sum += x;
+    check(sum == 15, "range visits all elements");
+}
+
 int main() {
     test_bar_progress();
     test_bar_zero_total();
     test_fmt_duration();
     test_bar_finish();
     test_bar_multithreaded();
+    test_spinner_start_stop();
+    test_spinner_stop_with_message();
+    test_spinner_destructor();
+    test_range_iteration();
 
-    std::cerr << "\n" << ok << "/" << (ok + fail) << " tests passed\n";
+    std::cerr << "
+" << ok << "/" << (ok + fail) << " tests passed
+";
     return fail == 0 ? 0 : 1;
 }
