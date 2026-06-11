@@ -62,6 +62,25 @@ download [===================>        ]  72% 1243.5/s eta 00:03
 extract  [===========>                ]  44%  980.1/s eta 00:02
 ```
 
+**range-based iteration:**
+
+wrap any container with `progress::Range` to track progress in a range-for loop:
+
+```cpp
+std::vector<Image> images = load_images();
+for (auto& img : progress::Range(images, "processing")) {
+    process(img);
+}
+```
+
+for numeric loops use `progress::irange`:
+
+```cpp
+for (size_t i : progress::irange(1000, "training")) {
+    train_step(i);
+}
+```
+
 **colored bars:**
 
 ```cpp
