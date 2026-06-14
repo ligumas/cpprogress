@@ -40,6 +40,28 @@ load_data();
 s.stop("done");
 ```
 
+**multiple bars at once:**
+
+```cpp
+progress::MultiBar mb;
+auto& download = mb.add(1000, "download");
+auto& extract  = mb.add(500,  "extract");
+mb.start();
+
+std::thread t1([&]{ for (int i=0; i<1000; i++) { do_work(); download.update(); } });
+std::thread t2([&]{ for (int i=0; i<500;  i++) { do_work(); extract.update();  } });
+t1.join(); t2.join();
+
+mb.stop();
+```
+
+output:
+
+```
+download [===================>        ]  72% 1243.5/s eta 00:03
+extract  [===========>                ]  44%  980.1/s eta 00:02
+```
+
 **Bar options:**
 
 ```cpp

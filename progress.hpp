@@ -8,6 +8,8 @@
 #include <mutex>
 #include <thread>
 #include <atomic>
+#include <memory>
+#include <vector>
 
 namespace progress {
 
@@ -24,6 +26,8 @@ inline std::string fmt_duration(double secs) {
     else       std::snprintf(buf, sizeof(buf), "%02d:%02d", m, s);
     return buf;
 }
+
+class MultiBar;
 
 class Bar {
 public:
@@ -44,31 +48,41 @@ public:
         std::lock_guard<std::mutex> lk(mtx_);
         n_ += n;
         if (n_ > total) n_ = total;
-        render();
+        if (!managed_) render();
     }
 
     void set(size_t n) {
         std::lock_guard<std::mutex> lk(mtx_);
         n_ = n > total ? total : n;
-        render();
+        if (!managed_) render();
     }
 
     void finish() {
         std::lock_guard<std::mutex> lk(mtx_);
         n_ = total;
-        render();
-        *out << "\n";
-        out->flush();
+        if (!managed_) {
+            render();
+            *out << "\n";
+            out->flush();
+        }
+    }
+
+    // Returns the rendered bar line (thread-safe, used by MultiBar)
+    std::string line() {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return build_line();
     }
 
     size_t current() const { return n_; }
 
 private:
+    friend class MultiBar;
     size_t n_;
     tp_t start_;
     mutable std::mutex mtx_;
+    bool managed_ = false;
 
-    void render() {
+    std::string build_line() {
         double pct = total > 0 ? (double)n_ / total : 0.0;
         int filled = (int)(pct * width);
         if (filled > width) filled = width;
@@ -102,8 +116,64 @@ private:
             ss << " eta " << fmt_duration(eta);
         }
 
-        *out << "\r" << ss.str() << "   ";
+        return ss.str();
+    }
+
+    void render() {
+        *out << "\r" << build_line() << "   ";
         out->flush();
+    }
+};
+
+// Display multiple bars simultaneously, each on its own line.
+// Add all bars before calling start().
+class MultiBar {
+public:
+    // Returns a reference valid for this MultiBar's lifetime.
+    Bar& add(size_t total, std::string label = "") {
+        bars_.push_back(std::make_unique<Bar>(total, std::move(label)));
+        bars_.back()->managed_ = true;
+        return *bars_.back();
+    }
+
+    void start() {
+        for (size_t i = 0; i < bars_.size(); i++)
+            std::cerr << "\n";
+        running_ = true;
+        t_ = std::thread([this] { loop(); });
+    }
+
+    void stop() {
+        running_ = false;
+        if (t_.joinable()) t_.join();
+        redraw();
+    }
+
+    ~MultiBar() {
+        if (running_) stop();
+    }
+
+private:
+    std::vector<std::unique_ptr<Bar>> bars_;
+    std::atomic<bool> running_{false};
+    std::thread t_;
+
+    void loop() {
+        while (running_) {
+            redraw();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        }
+    }
+
+    void redraw() {
+        int n = (int)bars_.size();
+        if (n == 0) return;
+        std::ostringstream out;
+        out << "\033[" << n << "A";
+        for (int i = 0; i < n; i++)
+            out << "\r\033[K" << bars_[i]->line() << "\n";
+        std::cerr << out.str();
+        std::cerr.flush();
     }
 };
 
