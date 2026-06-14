@@ -16,6 +16,16 @@ namespace progress {
 using clock_t = std::chrono::steady_clock;
 using tp_t    = std::chrono::time_point<clock_t>;
 
+namespace color {
+    constexpr const char* green   = "\033[32m";
+    constexpr const char* yellow  = "\033[33m";
+    constexpr const char* red     = "\033[31m";
+    constexpr const char* blue    = "\033[34m";
+    constexpr const char* cyan    = "\033[36m";
+    constexpr const char* magenta = "\033[35m";
+    constexpr const char* reset   = "\033[0m";
+}
+
 inline std::string fmt_duration(double secs) {
     if (secs < 0 || std::isinf(secs)) return "--:--";
     int s = (int)secs;
@@ -39,6 +49,7 @@ public:
     bool show_eta   = true;
     bool show_rate  = true;
     std::string prefix;
+    std::string bar_color;  // e.g. progress::color::green — empty means no color
     std::ostream* out = &std::cerr;
 
     explicit Bar(size_t total, std::string label = "")
@@ -93,10 +104,12 @@ private:
         std::ostringstream ss;
         if (!prefix.empty()) ss << prefix << " ";
         ss << "[";
+        if (!bar_color.empty()) ss << bar_color;
         for (int i = 0; i < filled - 1; i++) ss << fill;
         if (filled > 0 && n_ < total) ss << head;
         else if (filled > 0) ss << fill;
         for (int i = filled; i < width; i++) ss << empty;
+        if (!bar_color.empty()) ss << color::reset;
         ss << "] ";
 
         char pct_buf[8];
@@ -274,4 +287,3 @@ inline IRange irange(size_t n, std::string label = "") {
 }
 
 } // namespace progress
-

@@ -62,12 +62,26 @@ download [===================>        ]  72% 1243.5/s eta 00:03
 extract  [===========>                ]  44%  980.1/s eta 00:02
 ```
 
+**colored bars:**
+
+```cpp
+#include "progress.hpp"
+
+progress::Bar bar(total, "training");
+bar.bar_color = progress::color::green;   // green fill
+bar.update(50);
+bar.finish();
+
+// available: color::green, yellow, red, blue, cyan, magenta
+```
+
 **Bar options:**
 
 ```cpp
 bar.width = 40;        // bar width in chars
 bar.show_eta = true;
 bar.show_rate = true;
+bar.bar_color = progress::color::cyan;
 ```
 
 **License:** MIT
