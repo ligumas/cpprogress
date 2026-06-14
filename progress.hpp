@@ -59,6 +59,8 @@ public:
 
     void finish() {
         std::lock_guard<std::mutex> lk(mtx_);
+        if (finished_) return;
+        finished_ = true;
         n_ = total;
         if (!managed_) {
             render();
@@ -80,7 +82,8 @@ private:
     size_t n_;
     tp_t start_;
     mutable std::mutex mtx_;
-    bool managed_ = false;
+    bool managed_  = false;
+    bool finished_ = false;
 
     std::string build_line() {
         double pct = total > 0 ? (double)n_ / total : 0.0;
@@ -224,6 +227,8 @@ class Range {
 public:
     Range(Container& c, std::string label = "")
         : c_(c), bar_(c.size(), std::move(label)) {}
+
+    ~Range() { bar_.finish(); }
 
     struct Iter {
         typename Container::iterator it;
