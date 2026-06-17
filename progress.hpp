@@ -262,28 +262,38 @@ private:
 class IRange {
 public:
     IRange(size_t count, std::string label = "")
-        : count_(count), bar_(count, std::move(label)) {}
+        : from_(0), count_(count), bar_(count, std::move(label)) {}
+
+    IRange(size_t from, size_t to, std::string label = "")
+        : from_(from), count_(to > from ? to - from : 0),
+          bar_(to > from ? to - from : 0, std::move(label)) {}
 
     ~IRange() { bar_.finish(); }
 
     struct Iter {
         size_t i;
+        size_t from;
         Bar& bar;
-        size_t operator*() const { return i; }
+        size_t operator*() const { return from + i; }
         Iter& operator++() { ++i; bar.update(); return *this; }
         bool operator!=(const Iter& o) const { return i != o.i; }
     };
 
-    Iter begin() { return {0, bar_}; }
-    Iter end()   { return {count_, bar_}; }
+    Iter begin() { return {0, from_, bar_}; }
+    Iter end()   { return {count_, from_, bar_}; }
 
 private:
+    size_t from_;
     size_t count_;
     Bar bar_;
 };
 
 inline IRange irange(size_t n, std::string label = "") {
     return IRange(n, std::move(label));
+}
+
+inline IRange irange(size_t from, size_t to, std::string label = "") {
+    return IRange(from, to, std::move(label));
 }
 
 } // namespace progress
