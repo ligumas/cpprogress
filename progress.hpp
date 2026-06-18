@@ -10,6 +10,8 @@
 #include <atomic>
 #include <memory>
 #include <vector>
+#include <cstdlib>
+#include <unistd.h>
 
 namespace progress {
 
@@ -35,6 +37,15 @@ inline std::string fmt_duration(double secs) {
     if (h > 0) std::snprintf(buf, sizeof(buf), "%d:%02d:%02d", h, m, s);
     else       std::snprintf(buf, sizeof(buf), "%02d:%02d", m, s);
     return buf;
+}
+
+// Returns false when ANSI escape codes should be suppressed:
+// either NO_COLOR is set in the environment, or the stream is not a TTY.
+inline bool ansi_ok(std::ostream* s) {
+    if (std::getenv("NO_COLOR") != nullptr) return false;
+    if (s == &std::cerr) return isatty(STDERR_FILENO) != 0;
+    if (s == &std::cout) return isatty(STDOUT_FILENO) != 0;
+    return false;
 }
 
 class MultiBar;
@@ -83,7 +94,7 @@ public:
     // Returns the rendered bar line (thread-safe, used by MultiBar)
     std::string line() {
         std::lock_guard<std::mutex> lk(mtx_);
-        return build_line();
+        return build_line(true);
     }
 
     size_t current() const { return n_; }
@@ -96,7 +107,8 @@ private:
     bool managed_  = false;
     bool finished_ = false;
 
-    std::string build_line() {
+    std::string build_line(bool force_ansi = false) {
+        bool use_ansi = force_ansi || ansi_ok(out);
         double pct = total > 0 ? (double)n_ / total : 0.0;
         int filled = (int)(pct * width);
         if (filled > width) filled = width;
@@ -104,12 +116,12 @@ private:
         std::ostringstream ss;
         if (!prefix.empty()) ss << prefix << " ";
         ss << "[";
-        if (!bar_color.empty()) ss << bar_color;
+        if (!bar_color.empty() && use_ansi) ss << bar_color;
         for (int i = 0; i < filled - 1; i++) ss << fill;
         if (filled > 0 && n_ < total) ss << head;
         else if (filled > 0) ss << fill;
         for (int i = filled; i < width; i++) ss << empty;
-        if (!bar_color.empty()) ss << color::reset;
+        if (!bar_color.empty() && use_ansi) ss << color::reset;
         ss << "] ";
 
         char pct_buf[8];
@@ -136,7 +148,11 @@ private:
     }
 
     void render() {
-        *out << "\r" << build_line() << "   ";
+        if (ansi_ok(out)) {
+            *out << "\r" << build_line(true) << "   ";
+        } else {
+            *out << build_line(false) << "\n";
+        }
         out->flush();
     }
 };
@@ -221,11 +237,17 @@ private:
     std::atomic<bool> running_;
     std::thread t_;
     static constexpr const char* frames_[] = {"⠋","⠙","⠹","⠸","⠼","⠴","⠦","⠧","⠇","⠏"};
+    static constexpr const char* ascii_frames_[] = {"|","/","-","\\"};
 
     void loop() {
+        bool use_ansi = ansi_ok(&std::cerr);
         int i = 0;
         while (running_) {
-            std::cerr << "\r" << frames_[i % 10];
+            if (use_ansi) {
+                std::cerr << "\r" << frames_[i % 10];
+            } else {
+                std::cerr << "\r" << ascii_frames_[i % 4];
+            }
             if (!prefix.empty()) std::cerr << " " << prefix;
             std::cerr << "   ";
             std::cerr.flush();
