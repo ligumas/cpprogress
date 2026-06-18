@@ -39,8 +39,6 @@ inline std::string fmt_duration(double secs) {
     return buf;
 }
 
-// Returns false when ANSI escape codes should be suppressed:
-// either NO_COLOR is set in the environment, or the stream is not a TTY.
 inline bool ansi_ok(std::ostream* s) {
     if (std::getenv("NO_COLOR") != nullptr) return false;
     if (s == &std::cerr) return isatty(STDERR_FILENO) != 0;
@@ -60,7 +58,7 @@ public:
     bool show_eta   = true;
     bool show_rate  = true;
     std::string prefix;
-    std::string bar_color;  // e.g. progress::color::green — empty means no color
+    std::string bar_color;
     std::ostream* out = &std::cerr;
 
     explicit Bar(size_t total, std::string label = "")
@@ -91,7 +89,6 @@ public:
         }
     }
 
-    // Returns the rendered bar line (thread-safe, used by MultiBar)
     std::string line() {
         std::lock_guard<std::mutex> lk(mtx_);
         return build_line(true);
@@ -161,7 +158,6 @@ private:
 // Add all bars before calling start().
 class MultiBar {
 public:
-    // Returns a reference valid for this MultiBar's lifetime.
     Bar& add(size_t total, std::string label = "") {
         bars_.push_back(std::make_unique<Bar>(total, std::move(label)));
         bars_.back()->managed_ = true;
@@ -169,26 +165,40 @@ public:
     }
 
     void start() {
-        for (size_t i = 0; i < bars_.size(); i++)
-            std::cerr << "\n";
-        running_ = true;
-        t_ = std::thread([this] { loop(); });
+        ansi_ = ansi_ok(&std::cerr);
+        if (ansi_) {
+            for (size_t i = 0; i < bars_.size(); i++)
+                std::cerr << "\n";
+            running_ = true;
+            t_ = std::thread([this] { loop(); });
+        }
     }
 
     void stop() {
-        running_ = false;
-        if (t_.joinable()) t_.join();
-        redraw();
+        if (running_) {
+            running_ = false;
+            if (t_.joinable()) t_.join();
+        }
+        if (!done_) {
+            done_ = true;
+            redraw();
+        }
     }
 
     ~MultiBar() {
         if (running_) stop();
+        else if (!done_ && !bars_.empty()) {
+            done_ = true;
+            redraw();
+        }
     }
 
 private:
     std::vector<std::unique_ptr<Bar>> bars_;
     std::atomic<bool> running_{false};
     std::thread t_;
+    bool ansi_ = false;
+    bool done_ = false;
 
     void loop() {
         while (running_) {
@@ -200,12 +210,18 @@ private:
     void redraw() {
         int n = (int)bars_.size();
         if (n == 0) return;
-        std::ostringstream out;
-        out << "\033[" << n << "A";
-        for (int i = 0; i < n; i++)
-            out << "\r\033[K" << bars_[i]->line() << "\n";
-        std::cerr << out.str();
-        std::cerr.flush();
+        if (ansi_) {
+            std::ostringstream out;
+            out << "\033[" << n << "A";
+            for (int i = 0; i < n; i++)
+                out << "\r\033[K" << bars_[i]->line() << "\n";
+            std::cerr << out.str();
+            std::cerr.flush();
+        } else {
+            for (int i = 0; i < n; i++)
+                std::cerr << bars_[i]->line() << "\n";
+            std::cerr.flush();
+        }
     }
 };
 
