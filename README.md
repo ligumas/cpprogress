@@ -101,6 +101,7 @@ bar.width = 40;        // bar width in chars
 bar.show_eta = true;
 bar.show_rate = true;
 bar.bar_color = progress::color::cyan;
+bar.min_interval_ms = 50; // re-render at most every N ms
 ```
 
 **License:** MIT

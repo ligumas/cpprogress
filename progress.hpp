@@ -51,30 +51,32 @@ class MultiBar;
 class Bar {
 public:
     size_t total;
-    int width       = 40;
-    char fill       = '=';
-    char head       = '>';
-    char empty      = ' ';
-    bool show_eta   = true;
-    bool show_rate  = true;
+    int width          = 40;
+    int min_interval_ms = 50;
+    char fill          = '=';
+    char head          = '>';
+    char empty         = ' ';
+    bool show_eta      = true;
+    bool show_rate     = true;
     std::string prefix;
     std::string bar_color;
-    std::ostream* out = &std::cerr;
+    std::ostream* out  = &std::cerr;
 
     explicit Bar(size_t total, std::string label = "")
-        : total(total), prefix(std::move(label)), n_(0), start_(clock_t::now()) {}
+        : total(total), prefix(std::move(label)), n_(0),
+          start_(clock_t::now()), last_render_(clock_t::time_point{}) {}
 
     void update(size_t n = 1) {
         std::lock_guard<std::mutex> lk(mtx_);
         n_ += n;
         if (n_ > total) n_ = total;
-        if (!managed_) render();
+        if (!managed_) throttled_render();
     }
 
     void set(size_t n) {
         std::lock_guard<std::mutex> lk(mtx_);
         n_ = n > total ? total : n;
-        if (!managed_) render();
+        if (!managed_) throttled_render();
     }
 
     void finish() {
@@ -100,9 +102,19 @@ private:
     friend class MultiBar;
     size_t n_;
     tp_t start_;
+    tp_t last_render_;
     mutable std::mutex mtx_;
     bool managed_  = false;
     bool finished_ = false;
+
+    void throttled_render() {
+        auto now = clock_t::now();
+        auto ms  = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_render_).count();
+        if (ms >= min_interval_ms) {
+            render();
+            last_render_ = now;
+        }
+    }
 
     std::string build_line(bool force_ansi = false) {
         bool use_ansi = force_ansi || ansi_ok(out);
