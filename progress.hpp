@@ -91,6 +91,11 @@ public:
         }
     }
 
+    void set_suffix(std::string s) {
+        std::lock_guard<std::mutex> lk(mtx_);
+        suffix_ = std::move(s);
+    }
+
     std::string line() {
         std::lock_guard<std::mutex> lk(mtx_);
         return build_line(true);
@@ -106,6 +111,7 @@ private:
     mutable std::mutex mtx_;
     bool managed_  = false;
     bool finished_ = false;
+    std::string suffix_;
 
     void throttled_render() {
         auto now = clock_t::now();
@@ -152,6 +158,8 @@ private:
             double eta  = rate > 0 ? (total - n_) / rate : -1.0;
             ss << " eta " << fmt_duration(eta);
         }
+
+        if (!suffix_.empty()) ss << " " << suffix_;
 
         return ss.str();
     }
