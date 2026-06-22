@@ -31,6 +31,26 @@ output:
 training [===================>        ]  72% 1243.5/s eta 00:03
 ```
 
+**live suffix stats:**
+
+update the suffix mid-loop to show per-step metrics (thread-safe):
+
+```cpp
+progress::Bar bar(epochs, "training");
+for (int e = 0; e < epochs; e++) {
+    float loss = train_epoch(e);
+    bar.set_suffix("loss=" + std::to_string(loss));
+    bar.update();
+}
+bar.finish();
+```
+
+output:
+
+```
+training [===================>        ]  72% 1243.5/s eta 00:03 loss=0.234
+```
+
 spinner for when you don't know the total:
 
 ```cpp
@@ -102,6 +122,7 @@ bar.show_eta = true;
 bar.show_rate = true;
 bar.bar_color = progress::color::cyan;
 bar.min_interval_ms = 50; // re-render at most every N ms
+bar.set_suffix("key=val"); // live suffix text, thread-safe
 ```
 
 **License:** MIT
