@@ -11,7 +11,16 @@
 #include <memory>
 #include <vector>
 #include <cstdlib>
-#include <unistd.h>
+
+#ifdef _WIN32
+  #include <io.h>
+  #define PROGRESS_ISATTY_STDERR (_isatty(2) != 0)
+  #define PROGRESS_ISATTY_STDOUT (_isatty(1) != 0)
+#else
+  #include <unistd.h>
+  #define PROGRESS_ISATTY_STDERR (isatty(STDERR_FILENO) != 0)
+  #define PROGRESS_ISATTY_STDOUT (isatty(STDOUT_FILENO) != 0)
+#endif
 
 namespace progress {
 
@@ -41,8 +50,8 @@ inline std::string fmt_duration(double secs) {
 
 inline bool ansi_ok(std::ostream* s) {
     if (std::getenv("NO_COLOR") != nullptr) return false;
-    if (s == &std::cerr) return isatty(STDERR_FILENO) != 0;
-    if (s == &std::cout) return isatty(STDOUT_FILENO) != 0;
+    if (s == &std::cerr) return PROGRESS_ISATTY_STDERR;
+    if (s == &std::cout) return PROGRESS_ISATTY_STDOUT;
     return false;
 }
 
@@ -64,7 +73,7 @@ public:
 
     explicit Bar(size_t total, std::string label = "")
         : total(total), prefix(std::move(label)), n_(0),
-          start_(clock_t::now()), last_render_(clock_t::time_point{}) {}
+          start_(clock_t::now()), last_render_(tp_t{}) {}
 
     void update(size_t n = 1) {
         std::lock_guard<std::mutex> lk(mtx_);
