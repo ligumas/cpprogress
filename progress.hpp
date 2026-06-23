@@ -29,7 +29,7 @@ namespace color {
 }
 
 inline std::string fmt_duration(double secs) {
-    if (secs < 0 || std::isinf(secs)) return "--:--";
+    if (secs < 0 || !std::isfinite(secs)) return "--:--";
     int s = (int)secs;
     int m = s / 60; s %= 60;
     int h = m / 60; m %= 60;
@@ -153,7 +153,7 @@ private:
             ss << rbuf;
         }
 
-        if (show_eta && n_ > 0 && n_ < total) {
+        if (show_eta && n_ > 0 && n_ < total && elapsed > 0.1) {
             double rate = n_ / elapsed;
             double eta  = rate > 0 ? (total - n_) / rate : -1.0;
             ss << " eta " << fmt_duration(eta);
