@@ -110,7 +110,15 @@ public:
         return build_line(true);
     }
 
-    size_t current() const { return n_; }
+    size_t current() const {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return n_;
+    }
+
+    double elapsed() const {
+        std::lock_guard<std::mutex> lk(mtx_);
+        return std::chrono::duration<double>(clock_t::now() - start_).count();
+    }
 
 private:
     friend class MultiBar;
@@ -365,3 +373,4 @@ inline IRange irange(size_t from, size_t to, std::string label = "") {
 
 } // namespace progress
  // those who know phonk aura 
+
