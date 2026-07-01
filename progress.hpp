@@ -100,6 +100,26 @@ public:
         }
     }
 
+    // Reset progress to zero so the bar can be reused (e.g. across epochs).
+    // Keeps the current total and prefix unless new values are supplied.
+    void reset() {
+        std::lock_guard<std::mutex> lk(mtx_);
+        n_ = 0;
+        finished_ = false;
+        start_ = clock_t::now();
+        last_render_ = tp_t{};
+    }
+
+    void reset(size_t new_total, std::string new_label = "") {
+        std::lock_guard<std::mutex> lk(mtx_);
+        total = new_total;
+        if (!new_label.empty()) prefix = std::move(new_label);
+        n_ = 0;
+        finished_ = false;
+        start_ = clock_t::now();
+        last_render_ = tp_t{};
+    }
+
     void set_suffix(std::string s) {
         std::lock_guard<std::mutex> lk(mtx_);
         suffix_ = std::move(s);
@@ -372,5 +392,3 @@ inline IRange irange(size_t from, size_t to, std::string label = "") {
 }
 
 } // namespace progress
- // those who know phonk aura 
-
